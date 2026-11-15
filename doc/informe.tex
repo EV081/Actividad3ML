@@ -1,9 +1,9 @@
-\documentclass[11pt,a4paper]{article}
+\documentclass[10pt,a4paper]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[spanish,es-nodecimaldot]{babel}
 \usepackage{lmodern}
-\usepackage[margin=2.5cm]{geometry}
+\usepackage[margin=2.1cm]{geometry}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{amsmath}
@@ -16,7 +16,8 @@
 \setlength{\parskip}{0.4em}
 \setlength{\parindent}{0pt}
 
-\title{Segmentación no supervisada de una nube de puntos 3D de una fábrica\\[0.3em]
+\title{\includegraphics[height=2.6cm]{figs/UTEC_logo.png}\\[0.8em]
+Segmentación no supervisada de una nube de puntos 3D de una fábrica\\[0.3em]
 \large Curso de Machine Learning --- Grupo 67}
 
 \author{
@@ -42,11 +43,13 @@ etiquetas. Primero aplicamos lo visto en clase (k-means, DBSCAN, clustering jer�
 Gaussian Mixture y PCA) y después probamos una mejora en etapas: sacar el piso y el techo
 con RANSAC, separar el resto según la orientación local de cada punto, agrupar con HDBSCAN
 y poner nombres a los grupos con reglas geométricas simples. El método de clase dio 11
-grupos, pero partió el piso en 10 pedazos y no separó columnas individuales. El método en
-etapas dejó el piso en un solo segmento y encontró 9 grupos de huellas de columnas, aunque
-mezcló parte de la estructura y no mejoró las métricas internas. No tenemos etiquetas
-reales, así que no podemos medir exactitud; lo evaluamos con métricas internas, estabilidad
-y revisión visual.
+grupos numerados, pero partió el piso en 10 pedazos y no separó columnas individuales. El
+método en etapas aísla el piso y el techo de una vez, separa instancias de columnas (9 grupos
+de huellas) y le pone nombre a cada grupo (piso, techo, columna, viga, tubería, equipo).
+Nuestra conclusión es que \textbf{el método en etapas es más útil e interpretable que usar
+solo k-means o lo visto en clase}. Es una ventaja cualitativa: no tenemos etiquetas reales,
+así que no podemos medir exactitud, y en las métricas internas (silhouette y Davies-Bouldin)
+no superó a la línea base. Tampoco es más rápido.
 \end{abstract}
 
 \section{Introducción}
@@ -60,7 +63,7 @@ En la primera usamos solo las técnicas que vimos en el curso, para tener una l�
 (sección~\ref{sec:clase}). En la segunda probamos ideas nuevas para arreglar los problemas
 que vimos en esa línea base (sección~\ref{sec:etapas}). Todo el código está en el
 repositorio del grupo:
-\url{https://github.com/jcarlos-t/clasifica-puntos-pe}.
+\url{https://github.com/EV081/Actividad3ML}.
 
 \section{Datos y exploración}
 La nube viene de un escáner FARO y ya estaba reducida en densidad. Tiene 1\,647\,021 puntos y
@@ -74,15 +77,15 @@ Como el escáner deja el piso muy disperso, hay muchos puntos sueltos.
 
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=\textwidth]{figs/01_original.png}
+\includegraphics[width=0.95\textwidth]{figs/01_original.png}
 \caption{Nube original (submuestra) con su color. Vistas superior, lateral y 3D.}
 \label{fig:original}
 \end{figure}
 
 Trabajar con 1.6 millones de puntos es lento en métodos como el clustering jerárquico, así
 que usamos \textit{voxel downsampling}: dividimos el espacio en cubitos y nos quedamos con un
-punto por cubito. Con un voxel de 0.187 m quedaron 93\,903 puntos. Todos los notebooks usan
-esa misma muestra para poder comparar, y al final propagamos las etiquetas a los puntos
+punto por cubito. Con un voxel de 0.187 m quedaron 93\,903 puntos. Usamos
+esa misma muestra en todos los experimentos para poder comparar, y al final propagamos las etiquetas a los puntos
 completos con el vecino más cercano.
 
 \section{Preprocesamiento}
@@ -121,7 +124,8 @@ variables, y t-SNE solo para visualizar.
 \subsection{Métricas sin etiquetas}
 Como no hay etiquetas reales usamos: el \textit{silhouette} \cite{rousseeuw1987} (qué tan bien
 separado está cada punto de los otros grupos, entre $-1$ y 1, más alto es mejor), el índice de
-Davies-Bouldin \cite{davies1979} (más bajo es mejor), el porcentaje de ruido, el tamaño del
+Davies-Bouldin \cite{davies1979} (más bajo es mejor; este no lo vimos en clase, lo agregamos
+como segunda opinión), el porcentaje de ruido, el tamaño del
 grupo más grande y la estabilidad: repetir con otras semillas o submuestras y medir el
 Adjusted Rand Index (ARI) \cite{hubert1985} entre corridas (1 significa mismas particiones).
 Todo se calcula con scikit-learn \cite{pedregosa2011} y los valores de silhouette y
@@ -160,7 +164,7 @@ la primera versión (solo silhouette) elegía $K=2$ (ver sección~\ref{sec:clase
 En la mejora en etapas hicimos ablaciones: quitar la separación por orientación, quitar las
 normales, agregar color, cambiar el voxel (0.10, 0.15, 0.25 m), el $\varepsilon$ y
 \textit{minPts}, y DBSCAN contra HDBSCAN. La estabilidad se midió con tres submuestras de voxel
-distinto. El código y los notebooks se ejecutaron de punta a punta sin errores.
+distinto.
 
 \section{Resultados}
 
@@ -174,7 +178,7 @@ semillas 0.95 y el grupo más grande con 20.4\,\% de los puntos.
 
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=0.9\textwidth]{figs/02_curvas.png}
+\includegraphics[width=0.62\textwidth]{figs/02_curvas.png}
 \caption{k-means: curva del codo (WCSS) y silhouette para $K=2,\dots,12$ con distintas variables.}
 \label{fig:kmeans}
 \end{figure}
@@ -187,7 +191,7 @@ DBSCAN solo tiene dos comportamientos: todo pegado o todo ruido.
 
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=0.6\textwidth]{figs/03_kdistance.png}
+\includegraphics[width=0.45\textwidth]{figs/03_kdistance.png}
 \caption{Curva de distancia al $k$-ésimo vecino para elegir $\varepsilon$ en DBSCAN.}
 \label{fig:kdist}
 \end{figure}
@@ -199,7 +203,7 @@ componentes). La figura~\ref{fig:comp} resume la comparación.
 
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=0.9\textwidth]{figs/04_comparacion.png}
+\includegraphics[width=0.7\textwidth]{figs/04_comparacion.png}
 \caption{Comparación de jerárquico y GMM en silhouette y Davies-Bouldin.}
 \label{fig:comp}
 \end{figure}
@@ -210,7 +214,7 @@ reales, pero no para segmentar, porque t-SNE no conserva distancias globales.
 
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=0.9\textwidth]{figs/05_mapas.png}
+\includegraphics[width=0.7\textwidth]{figs/05_mapas.png}
 \caption{Proyecciones PCA y t-SNE de las variables, coloreadas por cluster de k-means.}
 \label{fig:pca}
 \end{figure}
@@ -225,14 +229,14 @@ como un objeto aparte.
 
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=\textwidth]{figs/06_completo.png}
+\includegraphics[width=0.95\textwidth]{figs/06_completo.png}
 \caption{Resultado de clase: k-means $K=11$ propagado a los 1\,647\,021 puntos.}
 \label{fig:clasefinal}
 \end{figure}
 
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=\textwidth]{figs/06_clusters_separados.png}
+\includegraphics[width=0.62\textwidth]{figs/06_clusters_separados.png}
 \caption{Cada grupo de k-means por separado (vista lateral $x$--$z$); los puntos grises son el resto de la nube.}
 \label{fig:clasepaneles}
 \end{figure}
@@ -247,7 +251,7 @@ de su rectángulo, menos que el 55\,\% que exigimos, y en realidad eran estructu
 
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=\textwidth]{figs/exp_01_estructura.png}
+\includegraphics[width=0.85\textwidth]{figs/exp_01_estructura.png}
 \caption{Etapa 1: piso y techo extraídos con RANSAC.}
 \label{fig:etapa1}
 \end{figure}
@@ -260,7 +264,7 @@ columnas altas pasaron de 1 a 9--16 (tabla~\ref{tab:ablacion}).
 
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=\textwidth]{figs/exp_02_orientaciones.png}
+\includegraphics[width=0.85\textwidth]{figs/exp_02_orientaciones.png}
 \caption{Etapa 2: clases de orientación local (vertical, horizontal en $x$, horizontal en $y$, planar).}
 \label{fig:orient}
 \end{figure}
@@ -294,21 +298,21 @@ Ruido & 1 & 9\,115 & 0.55 \\
 
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=\textwidth]{figs/exp_05_final.png}
+\includegraphics[width=0.95\textwidth]{figs/exp_05_final.png}
 \caption{Resultado final por etapas, con las clases heurísticas.}
 \label{fig:final}
 \end{figure}
 
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=0.95\textwidth]{figs/exp_05_panel_clases.png}
+\includegraphics[width=0.62\textwidth]{figs/exp_05_panel_clases.png}
 \caption{Cada clase heurística por separado (vista lateral).}
 \label{fig:panel}
 \end{figure}
 
 \begin{figure}[!htb]
 \centering
-\includegraphics[width=\textwidth]{figs/exp_05_columnas_instancias.png}
+\includegraphics[width=0.85\textwidth]{figs/exp_05_columnas_instancias.png}
 \caption{Instancias de columna candidatas, un color por instancia (vistas superior y lateral).}
 \label{fig:col}
 \end{figure}
@@ -318,7 +322,7 @@ Sacar las normales hizo bajar la estabilidad de 0.97 a 0.55 (ARI), así que las 
 fueron lo más útil. Agregar color o altura casi no cambió nada, y el tamaño del voxel
 modificó la cantidad de segmentos y de ruido (voxel de 0.25 m: 2.5\,\% de ruido). En el
 control sin orientación se ve el problema original: un segmento que concentra 61\,\% de los
-puntos. La figura~\ref{fig:abl} resume las ablaciones.
+puntos.
 
 \begin{table}[!htb]
 \centering
@@ -339,28 +343,52 @@ HDBSCAN (mín. 100) & 122 & 20.5 & 5 & 0.94 \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[!htb]
-\centering
-\includegraphics[width=0.85\textwidth]{figs/exp_04_resumen.png}
-\caption{Resumen de las ablaciones.}
-\label{fig:abl}
-\end{figure}
 \FloatBarrier
 
 \textbf{Comparación justa con la línea base.} Comparar silhouette entre 11 y 239
 segmentos no es justo, porque este índice premia pocos grupos. Por eso recalculamos las
 métricas en las mismas variables geométricas, con 91\,981 puntos y colapsando a $K=11$: la
 línea base obtuvo silhouette 0.146 y Davies-Bouldin 2.54 y el resultado final 0.107 y 2.59.
-\textbf{Por lo tanto, el método en etapas no mejora las métricas internas}; su ventaja está en
-cosas que esas métricas no miden: el piso es un solo segmento, se separan instancias de
-columnas y las clases tienen un significado geométrico. La concordancia entre ambos
-resultados es baja (ARI 0.17, NMI 0.26), lo que solo indica que son particiones distintas.
+\textbf{Por lo tanto, el método en etapas no mejora las métricas internas}; esas métricas
+premian grupos compactos y redondos, y las columnas y vigas son alargadas. Su ventaja está en
+cosas que esas métricas no miden y que sí se ven en las figuras, resumidas en la
+tabla~\ref{tab:comp}. La concordancia entre ambos resultados es baja (ARI 0.17, NMI 0.26), lo
+que solo indica que son particiones distintas.
+
+\begin{table}[!htb]
+\centering
+\caption{Línea base de clase (k-means $K=11$) frente al método en etapas.}
+\label{tab:comp}
+\small
+\begin{tabular}{p{3.6cm}p{5.4cm}p{5.4cm}}
+\toprule
+Criterio & k-means (clase) & Por etapas \\
+\midrule
+Nombre de los grupos & Solo ``cluster 0'', ``cluster 1''\ldots; el significado se interpreta a mano & Piso, techo, columna, viga, viga o tubería, equipo bajo \\
+Piso & 10 grupos lo tocan; el mayor tiene 36\,\% del piso & 1 segmento (488\,252 puntos) \\
+Techo & Un grupo, con fragmentos de vigas altas & 1 segmento (111\,522 puntos) \\
+Columnas por separado & No & Sí: 9 grupos de huellas (17 segmentos) \\
+Grupos mezclados & 2 de 11 (a ojo) & 15.5\,\% de la nube \\
+Silhouette / Davies-Bouldin & \textbf{0.146} / \textbf{2.54} & 0.107 / 2.59 \\
+Tiempo de ejecución total & Alrededor de 1.5 min & Alrededor de 5 min \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Discusión y limitaciones}
 \begin{itemize}
 \item \textbf{No hay etiquetas reales.} No podemos decir qué porcentaje de puntos está bien
 clasificado. Nuestra evaluación es interna, de estabilidad y visual, así que los números
-sirven para comparar configuraciones y no para afirmar exactitud.
+sirven para comparar configuraciones y no para afirmar exactitud. Por eso decimos que el
+método en etapas es \textit{más útil e interpretable}, no que sea \textit{más preciso}.
+\item \textbf{Por qué creemos que las etapas son más útiles.} Con k-means el piso termina
+repartido en varios grupos y mezclado con otros, porque el algoritmo solo mira distancias
+entre variables y no sabe qué es un plano. RANSAC encuentra el piso y el techo directamente.
+Además, k-means entrega grupos numerados y hay que mirarlos uno por uno para saber qué son,
+mientras que las etapas entregan clases con nombre. Esto es una ventaja de interpretación
+y no de exactitud medida.
+\item \textbf{Costo y métricas.} Las etapas son más lentas (alrededor de 5 min contra 1.5 min
+de ejecución total) y no superan a k-means en silhouette ni en Davies-Bouldin.
 \item \textbf{Regla de selección cambiada.} Dos veces ajustamos la regla de selección después
 de mirar los resultados: en clase (el silhouette elegía $K=2$) y en la etapa final (la
 primera elegida omitía columnas que se veían claras en la vista lateral, por lo que exigimos
@@ -383,6 +411,14 @@ revisaron sobre esta misma nube, así que no son una evaluación sobre datos nue
 \end{itemize}
 
 \section{Conclusiones}
+\textbf{Conclusión principal.} Para esta nube, el método en etapas es más útil que usar solo
+k-means o lo visto en clase, porque (1) aísla el piso y el techo de una vez, mientras que
+k-means los reparte en varios grupos; (2) separa instancias de columnas; y (3) le pone un nombre
+a cada grupo (piso, techo, columna, viga, tubería, equipo), mientras que k-means solo
+entrega ``cluster 0'', ``cluster 1'', etc. Es una ventaja de interpretación y utilidad, no de
+exactitud medida: no hay etiquetas reales, las métricas internas no la favorecen y el método
+es más lento.
+
 \begin{itemize}
 \item Con las técnicas de clase, k-means con $xyz$, color, normales y altura estandarizados
 y $K=11$ dio una primera segmentación útil (techo, vigas, tubería, columnas), pero el piso
