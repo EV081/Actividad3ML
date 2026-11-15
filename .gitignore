@@ -1,0 +1,14 @@
+# entorno y cachés
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+.cache/
+
+# material del curso (no se sube)
+teoria/
+
+# salidas intermedias regenerables (los entregables van en entregable/)
+outputs/
+AGENTS.md

@@ -1,0 +1,10 @@
+clase_heuristica,R,G,B
+columna,230,60,55
+compacto_plausible,30,200,190
+equipo_bajo,155,75,190
+mezcla_no_identificada,210,110,160
+piso,70,155,70
+ruido,45,45,45
+techo,90,140,230
+viga_horizontal,245,170,35
+viga_o_tuberia,225,125,25
