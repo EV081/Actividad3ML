@@ -199,3 +199,33 @@ def test_fair_comparison_filters_using_full_cloud_counts_and_paired_support():
     assert result['n_geo_K11']==2 and result['silhouette_geo']>.9
     assert_allclose(result['silhouette_geo'],result['silhouette_base_pareado'])
     assert 0<=result['NMI_clases_base']<=1
+
+
+def _box(rng, lo, hi, n):
+    return rng.uniform(lo, hi, (n, 3))
+
+
+def test_people_and_vehicle_are_free_objects_but_tall_structure_is_not():
+    from pcseg.stages import detect_people_vehicles
+    rng=np.random.default_rng(0)
+    floor=np.c_[rng.uniform(-10,10,(40000,2)),rng.normal(0,.005,40000)]
+    person=_box(rng,[0,0,.06],[.5,.3,1.75],2500)
+    truck=_box(rng,[5,5,.3],[9.5,6.8,1.8],20000)
+    pole=_box(rng,[-5,-5,.06],[-4.6,-4.6,4.],3000)
+    xyz=np.r_[floor,person,truck,pole]
+    cls=np.array(['piso']*len(floor)+['equipo_bajo']*len(person)+['viga_o_tuberia']*len(truck)+['mezcla_no_identificada']*len(pole))
+    new,obj,table=detect_people_vehicles(xyz,cls)
+    n0=len(floor)
+    assert (new[n0:n0+len(person)]=='persona').mean()>.95
+    assert (new[n0+len(person):n0+len(person)+len(truck)]=='vehiculo').mean()>.95
+    assert not np.isin(new[-len(pole):],['persona','vehiculo']).any()
+    assert (new[:n0]=='piso').all() and sorted(table.clase)==['persona','vehiculo']
+
+
+def test_write_ply_uses_standard_color_names(tmp_path):
+    from pcseg.io import write_ply, read_ply
+    xyz=np.zeros((4,3),np.float32);rgb=np.arange(12,dtype=np.uint8).reshape(4,3)
+    write_ply(tmp_path/'a.ply',xyz,rgb)
+    header=open(tmp_path/'a.ply','rb').read(200).split(b'end_header')[0]
+    assert b'property uchar red' in header and b'property uchar r\n' not in header
+    assert_array_equal(read_ply(tmp_path/'a.ply')['rgb'],rgb)

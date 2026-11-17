@@ -73,13 +73,13 @@ def read_ply(path):
 
 
 def write_ply(path, xyz, rgb, normals=None):
-    """Escribe x y z float, r g b uchar y, si se dan, nx ny nz float."""
+    """Escribe x y z float, red green blue uchar y, si se dan, nx ny nz float."""
     xyz = np.asarray(xyz)
     rgb = np.asarray(rgb)
     if xyz.ndim != 2 or xyz.shape[1] != 3 or rgb.shape != xyz.shape:
         raise ValueError("xyz y rgb deben tener forma (N, 3)")
     fields = [(name, "<f4") for name in ("x", "y", "z")]
-    fields += [(name, "u1") for name in ("r", "g", "b")]
+    fields += [(name, "u1") for name in ("red", "green", "blue")]
     columns = [*xyz.T, *rgb.T]
     if normals is not None:
         normals = np.asarray(normals)

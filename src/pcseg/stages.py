@@ -600,3 +600,118 @@ def infer_instance_axes(xyz, labels):
         direction=np.abs(vec[:,-1]);axis=int(direction.argmax())
         if direction[axis]>.85: result[int(label)]=axis
     return result
+
+
+def local_floor_height(xyz, floor_mask, cell=1.):
+    """Altura sobre el piso local: mediana z del piso por celda xy de 1 m."""
+    xyz=np.asarray(xyz,float)
+    g=np.floor(xyz[floor_mask,:2]/cell).astype(np.int64)
+    keys,inv=np.unique(g,axis=0,return_inverse=True)
+    inv=inv.ravel()
+    z=np.bincount(inv,xyz[floor_mask,2])/np.bincount(inv)
+    order=np.argsort(inv,kind='stable');starts=np.r_[0,np.cumsum(np.bincount(inv))[:-1]]
+    zs=xyz[floor_mask,2][order]
+    z=np.array([np.median(zs[s:s+c]) for s,c in zip(starts,np.bincount(inv))])
+    _,near=cKDTree((keys+.5)*cell).query(xyz[:,:2],workers=2)
+    return xyz[:,2]-z[near]
+
+
+def _footprint(q):
+    xy=q[:,:2]-q[:,:2].mean(axis=0)
+    if len(xy)<3: return 0.,0.
+    _,vec=np.linalg.eigh(np.cov(xy.T));p=xy@vec
+    return float(np.ptp(p[:,1])),float(np.ptp(p[:,0]))
+
+
+def detect_people_vehicles(xyz, classes, eps=.15, min_samples=8, min_points=60,
+                           cut=2.6, person_height=(1.45,1.95), person_width=(.4,1.),
+                           vehicle_length=(3.,7.), vehicle_width=1., vehicle_height=(1.2,2.6),
+                           head_radius=.38):
+    """Etapa 5: personas y vehículos como objetos libres sobre el piso.
+
+    Candidatos: todo lo que no es piso, techo ni columna, entre 0.05 m y `cut`
+    sobre el piso local. DBSCAN xyz forma objetos; un objeto que llega al corte
+    está unido a estructura más alta y se descarta. Reglas de tamaño humano y
+    vehicular sobre la huella PCA en xy. Grupos de personas pegadas se separan
+    buscando cabezas: puntos que son máximos locales en altura humana, con
+    espacio libre encima y cuerpo debajo. Devuelve nuevas
+    clases, id de objeto por punto (-1 si no aplica) y tabla de objetos.
+    """
+    xyz=np.asarray(xyz,float);classes=np.asarray(classes).astype('<U27').copy()
+    h=local_floor_height(xyz,classes=='piso')
+    cand=~np.isin(classes,['piso','techo','columna'])&(h>.05)&(h<cut)
+    idx=np.flatnonzero(cand)
+    obj=np.full(len(xyz),-1,np.int32);rows=[]
+    if len(idx)<min_samples: return classes,obj,pd.DataFrame()
+    lab=DBSCAN(eps=eps,min_samples=min_samples,n_jobs=2).fit_predict(xyz[idx])
+    order=np.argsort(lab,kind='stable');u,starts,counts=np.unique(lab[order],return_index=True,return_counts=True)
+    groups={int(l):idx[order[s:s+c]] for l,s,c in zip(u,starts,counts) if l>=0 and c>=min_points}
+    info={}
+    for l,ids in groups.items():
+        hq=h[ids];L,w=_footprint(xyz[ids])
+        info[l]=dict(hmin=float(hq.min()),hmax=float(np.percentile(hq,99.5)),top=float(hq.max()),
+                     L=L,w=w,bajo=float(np.mean(hq<.45)),n=len(ids))
+    def add(kind,ids,source):
+        k=len(rows);obj[ids]=k;classes[ids]=kind
+        q=xyz[ids];L,w=_footprint(q)
+        rows.append(dict(id=k,clase=kind,n_puntos=len(ids),altura=float(np.percentile(h[ids],99.5)),
+                         largo=L,ancho=w,cx=float(q[:,0].mean()),cy=float(q[:,1].mean()),origen=source))
+    free={l:f for l,f in info.items() if f['top']<cut-.1 and f['hmin']<.5 and f['bajo']<.3}
+    whole=cKDTree(xyz[:,:2])
+    used=set()
+    for l,f in free.items():
+        if (vehicle_length[0]<=f['L']<=vehicle_length[1] and f['w']>=vehicle_width
+                and vehicle_height[0]<=f['hmax']<=vehicle_height[1]):
+            ids=groups[l];lo=xyz[ids].min(axis=0)-.5;hi=xyz[ids].max(axis=0)+.5
+            for m in groups:
+                if m!=l and m not in used and info[m]['top']<cut-.1:
+                    q=xyz[groups[m]]
+                    if np.all(q.min(axis=0)>=lo) and np.all(q.max(axis=0)<=hi):
+                        ids=np.r_[ids,groups[m]];used.add(m)
+            used.add(l);add('vehiculo',ids,'regla_vehiculo')
+    for l,f in free.items():
+        if l in used: continue
+        if person_height[0]<=f['hmax']<=person_height[1] and person_width[0]<=f['L']<=person_width[1]:
+            used.add(l);add('persona',groups[l],'regla_persona');continue
+    for l,f in info.items():
+        if l in used or f['hmin']>=.5 or f['L']>4. or f['bajo']>=.3: continue
+        for ids in _people_by_heads(xyz,h,groups[l],person_height,head_radius,min_samples,whole):
+            ids=ids[obj[ids]<0]
+            if len(ids)>=min_points: add('persona',ids,'separacion_por_cabezas')
+    return classes,obj,pd.DataFrame(rows)
+
+
+def _people_by_heads(xyz, h, ids, person_height=(1.45,1.95), radius=.38, min_samples=8,
+                     whole=None, max_above=30, max_ring=450):
+    """Cabezas = cumbres locales a altura humana; cada una arrastra su cuerpo.
+
+    Con `whole` (cKDTree xy de toda la nube) se exige espacio libre: casi nada
+    encima de la cabeza (<0.4 m, hasta +1 m) y poco alrededor a la misma altura
+    (anillo 0.4-0.8 m). Las cimas de tanques y válvulas fallan esta prueba.
+    """
+    hq=h[ids];band=(hq>=person_height[0]-.1)&(hq<=person_height[1])
+    if band.sum()<min_samples: return []
+    tree=cKDTree(xyz[ids,:2]);top=np.zeros(len(ids),bool)
+    for j in np.flatnonzero(band):
+        near=tree.query_ball_point(xyz[ids[j],:2],.15)
+        top[j]=hq[near].max()<=hq[j]+.08
+    cand=np.flatnonzero(top)
+    if len(cand)<min_samples: return []
+    lab=DBSCAN(eps=.12,min_samples=5).fit_predict(xyz[ids[cand],:2])
+    people=[]
+    for b in np.unique(lab[lab>=0]):
+        head=cand[lab==b];hp=xyz[ids[head]]
+        crown=float(hq[head].max())
+        if len(head)<8 or max(_footprint(hp))>.45 or not person_height[0]<=crown<=person_height[1]:
+            continue
+        c=hp[:,:2].mean(axis=0)
+        near=(np.linalg.norm(xyz[ids,:2]-c,axis=1)<radius)&(hq<=crown+.05)
+        if np.count_nonzero(near&(hq<crown-.6))<15 or np.ptp(hq[near])<1.: continue
+        if whole is not None:
+            around=np.asarray(whole.query_ball_point(c,.8),dtype=np.int64)
+            d=np.linalg.norm(xyz[around,:2]-c,axis=1);ha=h[around]
+            above=np.count_nonzero((d<.4)&(ha>crown+.1)&(ha<crown+1.))
+            ring=np.count_nonzero((d>.4)&(ha>crown-.3)&(ha<crown+.4))
+            if above>max_above or ring>max_ring: continue
+        people.append(ids[near])
+    return people

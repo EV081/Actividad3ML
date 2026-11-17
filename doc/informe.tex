@@ -46,6 +46,8 @@ y poner nombres a los grupos con reglas geométricas simples. El método de clas
 grupos numerados, pero partió el piso en 10 pedazos y no separó columnas individuales. El
 método en etapas aísla el piso y el techo de una vez, separa instancias de columnas (9 grupos
 de huellas) y le pone nombre a cada grupo (piso, techo, columna, viga, tubería, equipo).
+Una quinta etapa busca objetos libres sobre el piso local y, con reglas de tamaño y una
+búsqueda de cabezas, encuentra una camioneta y 28 siluetas de persona.
 Nuestra conclusión es que \textbf{el método en etapas es más útil e interpretable que usar
 solo k-means o lo visto en clase}. Es una ventaja cualitativa: no tenemos etiquetas reales,
 así que no podemos medir exactitud, y en las métricas internas (silhouette y Davies-Bouldin)
@@ -150,6 +152,12 @@ colineales pequeños para no sobresegmentar.
 \item \textbf{Clases heurísticas}: a cada grupo le ponemos un nombre con reglas
 simples (por ejemplo, ``columna'' si es vertical, alargado y de más de 2 m de alto).
 Son reglas que nosotros definimos, no un clasificador entrenado.
+\item \textbf{Personas y vehículos} (etapa 5): sobre las clases anteriores, calculamos la altura de
+cada punto sobre el \textit{piso local} y agrupamos con DBSCAN lo que no es piso, techo ni
+columna y está entre 0.05 y 2.6 m. Los objetos que tocan el corte de 2.6 m están unidos a
+estructura más alta y se descartan; a los objetos libres les aplicamos reglas de tamaño
+humano y vehicular, y separamos grupos de personas pegadas buscando cabezas
+(sección~\ref{sec:etapa5}).
 \end{enumerate}
 
 \section{Diseño experimental}
@@ -269,7 +277,7 @@ columnas altas pasaron de 1 a 9--16 (tabla~\ref{tab:ablacion}).
 \label{fig:orient}
 \end{figure}
 
-\textbf{Resultado final.} Nos quedamos con HDBSCAN por orientación (voxel 0.15 m, tamaño
+\textbf{Resultado de la etapa 4.} Nos quedamos con HDBSCAN por orientación (voxel 0.15 m, tamaño
 mínimo de grupo 40), que dio 239 segmentos y 0.55\,\% de ruido. La tabla~\ref{tab:clases}
 muestra el reparto por clase y la figura~\ref{fig:final} el resultado completo. La
 figura~\ref{fig:panel} muestra cada clase por separado y la figura~\ref{fig:col} las
@@ -277,7 +285,7 @@ instancias de columna, con un color por instancia.
 
 \begin{table}[!htb]
 \centering
-\caption{Reparto de la nube final por clase heurística.}
+\caption{Reparto por clase heurística al final de la etapa 4 (antes de personas y vehículos).}
 \label{tab:clases}
 \begin{tabular}{lrrr}
 \toprule
@@ -299,7 +307,7 @@ Ruido & 1 & 9\,115 & 0.55 \\
 \begin{figure}[!htb]
 \centering
 \includegraphics[width=0.95\textwidth]{figs/exp_05_final.png}
-\caption{Resultado final por etapas, con las clases heurísticas.}
+\caption{Resultado de las etapas 1--4, con las clases heurísticas.}
 \label{fig:final}
 \end{figure}
 
@@ -317,6 +325,7 @@ Ruido & 1 & 9\,115 & 0.55 \\
 \label{fig:col}
 \end{figure}
 
+\FloatBarrier
 \textbf{Ablaciones.} La tabla~\ref{tab:ablacion} compara la línea base con variantes.
 Sacar las normales hizo bajar la estabilidad de 0.97 a 0.55 (ARI), así que las normales
 fueron lo más útil. Agregar color o altura casi no cambió nada, y el tamaño del voxel
@@ -375,6 +384,72 @@ Tiempo de ejecución total & Alrededor de 1.5 min & Alrededor de 5 min \\
 \end{tabular}
 \end{table}
 
+\FloatBarrier
+\subsection{Etapa 5: personas y vehículos}\label{sec:etapa5}
+Al revisar la nube con su color original vimos que sí hay personas y un vehículo, que las
+etapas 1--4 habían repartido en otras clases: las personas en ``equipo bajo'', ``mezcla'' y
+``compacto plausible'', y una camioneta pickup en ``viga o tubería''. La etapa 5 parte de las
+clases de la etapa 4 y hace lo siguiente:
+\begin{enumerate}
+\item \textbf{Piso local.} Mediana de $z$ de los puntos de piso en celdas de 1\,m; el piso
+no es plano (hay zonas 0.2\,m más altas), así que la altura se mide contra la celda más cercana.
+\item \textbf{Objetos libres.} DBSCAN ($\varepsilon=0.15$\,m, \textit{minPts}~8) sobre los
+puntos entre 0.05 y 2.6\,m que no son piso, techo ni columna. Un objeto que llega a 2.6\,m
+está pegado a estructura y se descarta; uno con más de 30\,\% de puntos bajo 0.45\,m es una
+tarima o plataforma.
+\item \textbf{Vehículo}: huella PCA en $xy$ de 3--7\,m por al menos 1\,m y altura de
+1.2--2.6\,m. \textbf{Persona}: altura de 1.45--1.95\,m y huella de 0.4--1.0\,m.
+\item \textbf{Personas pegadas.} En objetos más grandes buscamos cabezas: cimas locales a
+altura humana agrupadas con DBSCAN en $xy$, con cuerpo debajo, sin puntos encima y con poco
+alrededor a la misma altura (esto descarta la parte superior de tanques y válvulas). Cada
+cabeza toma los puntos a menos de 0.38\,m en $xy$.
+\end{enumerate}
+Resultado: \textbf{1 vehículo} (6\,586 puntos) y \textbf{28 detecciones de persona}
+(10\,127 puntos), revisadas una por una contra el RGB original
+(figura~\ref{fig:etapa5}). El escáner gira mientras la gente camina, así que una persona en
+movimiento aparece como \textit{rebanadas} de unos 2\,cm de ancho con silueta humana; varias
+detecciones pueden ser la misma persona, por lo que 28 no es un conteo de personas. En
+nuestras pruebas, sin la condición de espacio libre alrededor de la cabeza salían 7 falsos
+positivos en tanques y válvulas; con ella no quedó ninguno visible.
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[width=0.95\textwidth]{figs/exp_06_personas_vehiculos.png}
+\caption{Detecciones de la etapa 5 (color de clase) sobre su entorno con el RGB original.}
+\label{fig:etapa5}
+\end{figure}
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[width=0.95\textwidth]{figs/exp_06_final.png}
+\caption{Nube final exportada (\texttt{entregable/final\_segmentos.ply}): etapas 1--5.}
+\label{fig:final6}
+\end{figure}
+
+\begin{table}[!htb]
+\centering
+\caption{Reparto de la nube final exportada, con la etapa 5. Los segmentos de las clases de la etapa 4 son los de la tabla~\ref{tab:clases}.}
+\label{tab:clases6}
+\begin{tabular}{lrrr}
+\toprule
+Clase & Segmentos & Puntos & \% \\
+\midrule
+Piso & 1 & 488\,252 & 29.64 \\
+Viga horizontal & 53 & 316\,359 & 19.21 \\
+Viga o tubería & 76 & 302\,955 & 18.39 \\
+Mezcla no identificada & 63 & 254\,835 & 15.47 \\
+Columna & 17 & 113\,352 & 6.88 \\
+Techo & 1 & 111\,522 & 6.77 \\
+Equipo bajo & 22 & 28\,778 & 1.75 \\
+\textbf{Persona} & \textbf{28} & \textbf{10\,127} & \textbf{0.61} \\
+Ruido & 1 & 8\,689 & 0.53 \\
+\textbf{Vehículo} & \textbf{1} & \textbf{6\,586} & \textbf{0.40} \\
+Compacto plausible & 6 & 5\,566 & 0.34 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\FloatBarrier
 \section{Discusión y limitaciones}
 \begin{itemize}
 \item \textbf{No hay etiquetas reales.} No podemos decir qué porcentaje de puntos está bien
@@ -396,8 +471,13 @@ al menos 6 grupos de huellas altas). Es razonable, pero no es una elección fija
 antemano, y lo declaramos por eso.
 \item \textbf{Las clases son heurísticas.} Con linealidad y planaridad no pudimos distinguir
 tuberías de vigas, así que quedó una clase ``viga o tubería''. Tampoco hay una clase
-``truss'' ni ``pared'' confirmada. Los 6 grupos ``compactos plausibles'' no permiten decir
-que haya personas o vehículos; no encontramos evidencia de ninguno.
+``truss'' ni ``pared'' confirmada.
+\item \textbf{Personas y vehículos.} La etapa 5 se ajustó y se revisó a ojo sobre esta
+misma nube. No detecta personas pegadas a estructura que pasa de 2.6\,m ni personas tapadas
+hasta la cintura (por ejemplo, tres detrás de una baranda cerca de $(10, 19)$), y un objeto
+delgado de 1.5--1.9\,m con silueta parecida podría pasar como persona. Las rebanadas de
+personas en movimiento hacen que el número de detecciones no sea un conteo. Solo hay un
+vehículo en la escena, así que la regla de vehículo está probada con un solo caso.
 \item \textbf{Columnas.} Los 17 segmentos de columna incluyen fragmentos y algunos soportes
 que no son columnas completas (por ejemplo, cerca de $x\approx0.5$ y $3.5$ m quedan
 incompletas) y algunos fragmentos duplicados. Son candidatas, no un censo.
@@ -414,7 +494,7 @@ revisaron sobre esta misma nube, así que no son una evaluación sobre datos nue
 \textbf{Conclusión principal.} Para esta nube, el método en etapas es más útil que usar solo
 k-means o lo visto en clase, porque (1) aísla el piso y el techo de una vez, mientras que
 k-means los reparte en varios grupos; (2) separa instancias de columnas; y (3) le pone un nombre
-a cada grupo (piso, techo, columna, viga, tubería, equipo), mientras que k-means solo
+a cada grupo (piso, techo, columna, viga, tubería, equipo, persona, vehículo), mientras que k-means solo
 entrega ``cluster 0'', ``cluster 1'', etc. Es una ventaja de interpretación y utilidad, no de
 exactitud medida: no hay etiquetas reales, las métricas internas no la favorecen y el método
 es más lento.
@@ -429,8 +509,10 @@ se juntaba o todo era ruido; aprendimos que hay que mirar varias métricas y las
 bajó la mezcla de 61\,\% a 15.5\,\% (con HDBSCAN) y subió los grupos de columnas altas de 1 a 9.
 Las normales fueron la variable más importante.
 \item El piso quedó como un solo segmento gracias a RANSAC.
+\item Las personas y el vehículo no salen de la forma local: hay que buscarlos como objetos
+libres sobre el piso local. Con eso la etapa 5 encontró la camioneta y 28 siluetas de persona.
 \item El método en etapas no superó a la línea base en silhouette ni Davies-Bouldin, y sigue
-con limitaciones (mezcla, tuberías contra vigas, sin personas ni vehículos confirmados).
+con limitaciones (mezcla, tuberías contra vigas, personas ocultas o pegadas a estructura).
 \end{itemize}
 
 \begin{thebibliography}{9}
