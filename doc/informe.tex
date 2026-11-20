@@ -8,11 +8,13 @@
 \usepackage{booktabs}
 \usepackage{amsmath}
 \usepackage{placeins}
+\usepackage{float}
 \usepackage{caption}
 \usepackage[dvipsnames]{xcolor}
 \usepackage{hyperref}
 \hypersetup{colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black,citecolor=blue!50!black}
 \captionsetup{font=small}
+\renewcommand{\labelenumi}{\arabic{enumi})}
 \setlength{\parskip}{0.4em}
 \setlength{\parindent}{0pt}
 
@@ -77,9 +79,9 @@ La figura~\ref{fig:original} muestra la nube con su color original. Se ven dos z
 estructura metálica (arriba y abajo en la vista superior), un techo a unos 9 m y el piso.
 Como el escáner deja el piso muy disperso, hay muchos puntos sueltos.
 
-\begin{figure}[!htb]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.95\textwidth]{figs/01_original.png}
+\includegraphics[width=0.95\textwidth,height=0.30\textheight,keepaspectratio]{figs/01_original.png}
 \caption{Nube original (submuestra) con su color. Vistas superior, lateral y 3D.}
 \label{fig:original}
 \end{figure}
@@ -91,37 +93,28 @@ esa misma muestra en todos los experimentos para poder comparar, y al final prop
 completos con el vecino más cercano.
 
 \section{Preprocesamiento}
-\textbf{Estandarización.} Las coordenadas están en metros (rango de decenas), las normales
-entre $-1$ y $1$ y el color en Lab entre 0 y 100. Como k-means y PCA usan distancias, una
-variable con escala grande domina a las demás, así que estandarizamos (media 0, desviación
-1). Lo comprobamos con PCA (figura~\ref{fig:pca}): sin estandarizar, dos componentes
-explican el 82.7\,\% de la varianza solo porque las coordenadas y el color tienen escalas
-grandes; estandarizando bajan a 47.0\,\% y se necesitan 7 componentes para llegar al 90\,\%.
-
-\textbf{Color.} Convertimos RGB a CIE Lab, porque en ese espacio la distancia euclidiana se
-parece más a la diferencia de color que percibimos.
-
-\textbf{Altura.} Agregamos \textit{height}, que es $z$ menos el percentil 1 de $z$, como
-una forma de medir la altura sobre el piso.
+\textbf{Estandarización.} Las coordenadas están en metros (rango de decenas), las normales entre $-1$ y $1$ y el color en Lab entre 0 y 100. Como k-means y PCA usan distancias, una variable con escala grande domina a las demás, así que estandarizamos (media 0, desviación 1). Lo comprobamos con PCA (figura~\ref{fig:pca}): sin estandarizar, dos componentes explican el 82.7\,\% de la varianza solo porque las coordenadas y el color tienen escalas grandes; estandarizando bajan a 47.0\,\% y se necesitan 7 componentes para llegar al 90\,\%. Además, convertimos RGB a CIE Lab, porque en ese espacio la distancia euclidiana se parece más a la diferencia de color que percibimos. Por último, agregamos \textit{height}, que es $z$ menos el percentil 1 de $z$, como una forma de medir la altura sobre el piso.
 
 \section{Metodología}
 
 \subsection{Lo visto en clase}
-\begin{itemize}
-\item \textbf{k-means} \cite{lloyd1982}: elegimos $K$ centros, asignamos cada punto al centro
+\textbf{k-means} \cite{lloyd1982}: elegimos $K$ centros, asignamos cada punto al centro
 más cercano y movemos cada centro al promedio de sus puntos, repitiendo hasta que nadie
 cambie. Depende de la inicialización y asume grupos más o menos redondos.
-\item \textbf{DBSCAN} \cite{ester1996}: define grupos como regiones densas. Hay que elegir un
+
+\textbf{DBSCAN} \cite{ester1996}: define grupos como regiones densas. Hay que elegir un
 radio $\varepsilon$ y un mínimo de vecinos \textit{minPts}; los puntos aislados quedan como
 ruido. No pide $K$.
-\item \textbf{Clustering jerárquico aglomerativo}: parte con cada punto solo y va uniendo los
+
+\textbf{Clustering jerárquico aglomerativo}: parte con cada punto solo y va uniendo los
 dos grupos más cercanos. El resultado cambia con el \textit{linkage} (single, complete,
 average, Ward).
-\item \textbf{Gaussian Mixture (GMM)}: modela los datos como una mezcla de gaussianas y la
+
+\textbf{Gaussian Mixture (GMM)}: modela los datos como una mezcla de gaussianas y la
 ajusta con EM; el número de componentes se elige con BIC.
-\item \textbf{PCA}: proyecta a las direcciones de mayor varianza. Lo usamos para entender las
+
+\textbf{PCA}: proyecta a las direcciones de mayor varianza. Lo usamos para entender las
 variables, y t-SNE solo para visualizar.
-\end{itemize}
 
 \subsection{Métricas sin etiquetas}
 Como no hay etiquetas reales usamos: el \textit{silhouette} \cite{rousseeuw1987} (qué tan bien
@@ -151,13 +144,12 @@ $\varepsilon$ (usamos \texttt{hdbscan} \cite{mcinnes2017}). Luego unimos fragmen
 colineales pequeños para no sobresegmentar.
 \item \textbf{Clases heurísticas}: a cada grupo le ponemos un nombre con reglas
 simples (por ejemplo, ``columna'' si es vertical, alargado y de más de 2 m de alto).
-Son reglas que nosotros definimos, no un clasificador entrenado.
-\item \textbf{Personas y vehículos} (etapa 5): sobre las clases anteriores, calculamos la altura de
+\item \textbf{Personas y vehículos}: sobre las clases anteriores, calculamos la altura de
 cada punto sobre el \textit{piso local} y agrupamos con DBSCAN lo que no es piso, techo ni
 columna y está entre 0.05 y 2.6 m. Los objetos que tocan el corte de 2.6 m están unidos a
 estructura más alta y se descartan; a los objetos libres les aplicamos reglas de tamaño
-humano y vehicular, y separamos grupos de personas pegadas buscando cabezas
-(sección~\ref{sec:etapa5}).
+humano y vehicular, y separamos grupos de personas pegadas buscando cabezas (etapa 5 en la
+sección~\ref{sec:etapas}).
 \end{enumerate}
 
 \section{Diseño experimental}
@@ -184,9 +176,9 @@ silhouette favorece pocos grupos grandes y que no sirve por sí solo para decidi
 normales + altura, estandarizado: silhouette común 0.213, Davies-Bouldin 1.51, ARI entre
 semillas 0.95 y el grupo más grande con 20.4\,\% de los puntos.
 
-\begin{figure}[!htb]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.62\textwidth]{figs/02_curvas.png}
+\includegraphics[width=0.62\textwidth,height=0.30\textheight,keepaspectratio]{figs/02_curvas.png}
 \caption{k-means: curva del codo (WCSS) y silhouette para $K=2,\dots,12$ con distintas variables.}
 \label{fig:kmeans}
 \end{figure}
@@ -197,9 +189,9 @@ silhouette se ve alto porque solo se calcula sobre lo que no es ruido). Con $\va
 casi todo (99.2\,\%) cae en un solo grupo. En esta nube, la estructura está tan conectada que
 DBSCAN solo tiene dos comportamientos: todo pegado o todo ruido.
 
-\begin{figure}[!htb]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.45\textwidth]{figs/03_kdistance.png}
+\includegraphics[width=0.45\textwidth,height=0.30\textheight,keepaspectratio]{figs/03_kdistance.png}
 \caption{Curva de distancia al $k$-ésimo vecino para elegir $\varepsilon$ en DBSCAN.}
 \label{fig:kdist}
 \end{figure}
@@ -209,9 +201,9 @@ para average con $K=2$; 0.260 para GMM diagonal con 2 componentes). El BIC prefi
 con más componentes dentro del rango probado, pero con silhouette bajo (0.066 con 8
 componentes). La figura~\ref{fig:comp} resume la comparación.
 
-\begin{figure}[!htb]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.7\textwidth]{figs/04_comparacion.png}
+\includegraphics[width=0.7\textwidth,height=0.30\textheight,keepaspectratio]{figs/04_comparacion.png}
 \caption{Comparación de jerárquico y GMM en silhouette y Davies-Bouldin.}
 \label{fig:comp}
 \end{figure}
@@ -220,9 +212,9 @@ componentes). La figura~\ref{fig:comp} resume la comparación.
 (PCA y t-SNE sobre una muestra pequeña, solo para mirar). Sirvieron para ver que hay grupos
 reales, pero no para segmentar, porque t-SNE no conserva distancias globales.
 
-\begin{figure}[!htb]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.7\textwidth]{figs/05_mapas.png}
+\includegraphics[width=0.7\textwidth,height=0.30\textheight,keepaspectratio]{figs/05_mapas.png}
 \caption{Proyecciones PCA y t-SNE de las variables, coloreadas por cluster de k-means.}
 \label{fig:pca}
 \end{figure}
@@ -235,16 +227,16 @@ grupos (1, 2 y 8) y solo 36\,\% del piso quedó en su grupo más grande (10 grup
 piso), y hay grupos mezcla de equipos bajos y estructura. Además no distingue cada columna
 como un objeto aparte.
 
-\begin{figure}[!htb]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.95\textwidth]{figs/06_completo.png}
+\includegraphics[width=0.95\textwidth,height=0.30\textheight,keepaspectratio]{figs/06_completo.png}
 \caption{Resultado de clase: k-means $K=11$ propagado a los 1\,647\,021 puntos.}
 \label{fig:clasefinal}
 \end{figure}
 
-\begin{figure}[!htb]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.62\textwidth]{figs/06_clusters_separados.png}
+\includegraphics[width=0.62\textwidth,height=0.30\textheight,keepaspectratio]{figs/06_clusters_separados.png}
 \caption{Cada grupo de k-means por separado (vista lateral $x$--$z$); los puntos grises son el resto de la nube.}
 \label{fig:clasepaneles}
 \end{figure}
@@ -253,13 +245,14 @@ como un objeto aparte.
 \subsection{Mejora en etapas}\label{sec:etapas}
 \textbf{Etapa 1: piso y techo.} RANSAC encontró dos planos grandes, el piso con 488\,252
 puntos (29.6\,\%) y el techo con 111\,522 (6.8\,\%). Con un umbral de 0.08 m el piso queda
-completo en un solo segmento (con 0.03 m solo un 80\,\% de los puntos del piso). La figura~\ref{fig:etapa1} lo
-muestra. Los supuestos planos verticales (paredes) se descartaron porque cubrían solo 12--18\,\%
-de su rectángulo, menos que el 55\,\% que exigimos, y en realidad eran estructura metálica.
+completo en un solo segmento (con 0.03 m solo un 80\,\% de los puntos del piso). La
+figura~\ref{fig:etapa1} lo muestra. Los supuestos planos verticales (paredes) se descartaron
+porque cubrían solo 12--18\,\% de su rectángulo, menos que el 55\,\% que exigimos, y en
+realidad eran estructura metálica.
 
-\begin{figure}[!htb]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.85\textwidth]{figs/exp_01_estructura.png}
+\includegraphics[width=0.85\textwidth,height=0.30\textheight,keepaspectratio]{figs/exp_01_estructura.png}
 \caption{Etapa 1: piso y techo extraídos con RANSAC.}
 \label{fig:etapa1}
 \end{figure}
@@ -270,20 +263,44 @@ antes por orientación local (figura~\ref{fig:orient}) y agrupar dentro de cada 
 mezcla bajó de 61.1\,\% a 7.6\,\% con DBSCAN y a 15.5\,\% con HDBSCAN, y los grupos de
 columnas altas pasaron de 1 a 9--16 (tabla~\ref{tab:ablacion}).
 
-\begin{figure}[!htb]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.85\textwidth]{figs/exp_02_orientaciones.png}
+\includegraphics[width=0.85\textwidth,height=0.30\textheight,keepaspectratio]{figs/exp_02_orientaciones.png}
 \caption{Etapa 2: clases de orientación local (vertical, horizontal en $x$, horizontal en $y$, planar).}
 \label{fig:orient}
 \end{figure}
 
-\textbf{Resultado de la etapa 4.} Nos quedamos con HDBSCAN por orientación (voxel 0.15 m, tamaño
-mínimo de grupo 40), que dio 239 segmentos y 0.55\,\% de ruido. La tabla~\ref{tab:clases}
-muestra el reparto por clase y la figura~\ref{fig:final} el resultado completo. La
-figura~\ref{fig:panel} muestra cada clase por separado y la figura~\ref{fig:col} las
-instancias de columna, con un color por instancia.
+\textbf{Etapas 3 y 4: agrupar y poner nombre.} Nos quedamos con HDBSCAN por orientación
+(voxel 0.15 m, tamaño mínimo de grupo 40), que dio 239 segmentos y 0.55\,\% de ruido.
+A cada segmento le asignamos una clase según su tamaño y su forma; las reglas están en la
+tabla~\ref{tab:reglas}, donde el ancho es la mayor extensión en $xy$, la altura es la extensión
+en $z$ y la linealidad y la esfericidad salen del PCA del segmento. Las reglas se evalúan en
+ese orden y la primera que se cumple define la clase. La tabla~\ref{tab:clases} muestra el
+reparto por clase, la
+figura~\ref{fig:final} el resultado completo, la figura~\ref{fig:panel} cada clase por
+separado y la figura~\ref{fig:col} las instancias de columna, con un color por instancia.
 
-\begin{table}[!htb]
+\begin{table}[H]
+\centering
+\caption{Reglas de tamaño y forma de las clases de las etapas 1 a 4, en el orden en que se evalúan.}
+\label{tab:reglas}
+\small
+\begin{tabular}{lp{11.2cm}}
+\toprule
+Clase & Regla \\
+\midrule
+Piso, techo & Planos horizontales de RANSAC (umbral 0.08\,m): el de abajo es el piso y el de arriba el techo \\
+Columna & Altura mayor a 2\,m, altura/ancho $\ge 3$ y eje principal casi vertical ($|\cos|>0.85$) \\
+Viga horizontal & Linealidad $\ge 0.60$, eje casi horizontal ($|\cos|<0.30$ con la vertical) y segundo eje más de 4 veces el tercero (sección ancha y plana) \\
+Viga o tubería & Linealidad $\ge 0.60$ y eje casi horizontal con sección más redonda, o eje inclinado ($|\cos|<0.80$) \\
+Compacto plausible & Altura entre 0.4 y 2\,m y ancho entre 0.3 y 1\,m \\
+Equipo bajo & Altura media menor a 3\,m sobre el piso, altura menor a 3\,m, linealidad $<0.65$ y esfericidad $\ge 0.03$ \\
+Mezcla no identificada & Todo lo que no cumple ninguna de las reglas anteriores \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
 \centering
 \caption{Reparto por clase heurística al final de la etapa 4 (antes de personas y vehículos).}
 \label{tab:clases}
@@ -304,129 +321,83 @@ Ruido & 1 & 9\,115 & 0.55 \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[!htb]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.95\textwidth]{figs/exp_05_final.png}
+\includegraphics[width=0.95\textwidth,height=0.30\textheight,keepaspectratio]{figs/exp_05_final.png}
 \caption{Resultado de las etapas 1--4, con las clases heurísticas.}
 \label{fig:final}
 \end{figure}
 
-\begin{figure}[!htb]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.62\textwidth]{figs/exp_05_panel_clases.png}
+\includegraphics[width=0.62\textwidth,height=0.30\textheight,keepaspectratio]{figs/exp_05_panel_clases.png}
 \caption{Cada clase heurística por separado (vista lateral).}
 \label{fig:panel}
 \end{figure}
 
-\begin{figure}[!htb]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.85\textwidth]{figs/exp_05_columnas_instancias.png}
+\includegraphics[width=0.85\textwidth,height=0.30\textheight,keepaspectratio]{figs/exp_05_columnas_instancias.png}
 \caption{Instancias de columna candidatas, un color por instancia (vistas superior y lateral).}
 \label{fig:col}
 \end{figure}
 
 \FloatBarrier
-\textbf{Ablaciones.} La tabla~\ref{tab:ablacion} compara la línea base con variantes.
-Sacar las normales hizo bajar la estabilidad de 0.97 a 0.55 (ARI), así que las normales
-fueron lo más útil. Agregar color o altura casi no cambió nada, y el tamaño del voxel
-modificó la cantidad de segmentos y de ruido (voxel de 0.25 m: 2.5\,\% de ruido). En el
-control sin orientación se ve el problema original: un segmento que concentra 61\,\% de los
-puntos.
+\textbf{Etapa 5: personas y vehículos.} Ninguna de las clases de la etapa 4 corresponde a
+personas ni a vehículos. Sin embargo, al mirar la nube con su color original sí aparecen:
+las personas habían quedado repartidas en ``equipo bajo'', ``mezcla'' y ``compacto
+plausible'', y una camioneta pickup dentro de ``viga o tubería''. Por eso la etapa 5 parte
+de las clases de la etapa 4 y busca objetos sueltos sobre el piso.
 
-\begin{table}[!htb]
-\centering
-\caption{Ablaciones principales. Mezcla y columnas altas son sobre la nube completa; ARI es estabilidad entre submuestras (la línea base usa semillas, protocolo distinto).}
-\label{tab:ablacion}
-\small
-\begin{tabular}{lrrrr}
-\toprule
-Configuración & Segmentos & Mezcla \% & Col. altas & ARI \\
-\midrule
-Línea base (k-means $K=11$) & 11 & --- & --- & 0.95 \\
-DBSCAN sin orientación & 106 & 61.1 & 1 & 0.97 \\
-DBSCAN con orientación & 664 & 7.6 & 16 & 0.97 \\
-Con orientación sin normales & 708 & 7.6 & 16 & 0.55 \\
-HDBSCAN (mín. 100) & 122 & 20.5 & 5 & 0.94 \\
-\textbf{HDBSCAN (mín. 40, final)} & \textbf{239} & \textbf{15.5} & \textbf{9} & \textbf{0.97} \\
-\bottomrule
-\end{tabular}
-\end{table}
+Primero calculamos un piso local, con la mediana de $z$ de los puntos de piso en celdas de
+1\,m. Lo hacemos así porque el piso no es plano (hay zonas 0.2\,m más altas), y entonces la
+altura de cada punto se mide contra la celda más cercana. Después agrupamos con DBSCAN
+($\varepsilon=0.15$\,m, \textit{minPts}~8) los puntos que no son piso, techo ni columna y que
+están entre 0.05 y 2.6\,m de altura. Si un objeto llega a 2.6\,m, está pegado a estructura y
+lo descartamos; si más de 30\,\% de sus puntos están bajo 0.45\,m, lo tomamos como una tarima
+o plataforma.
 
-\FloatBarrier
+A cada objeto libre le aplicamos las reglas de tamaño de la tabla~\ref{tab:reglas5}, que
+usan la huella en $xy$ (largo y ancho de su PCA) y la altura sobre el piso local. Para las personas
+pegadas entre sí o a otros objetos buscamos cabezas dentro de los objetos más grandes: cimas
+locales a altura humana, agrupadas con DBSCAN en $xy$, que tengan cuerpo debajo, ningún punto
+encima y poco alrededor a la misma altura (esta última condición descarta la parte superior
+de tanques y válvulas). Cada cabeza se queda con los puntos que están a menos de 0.38\,m en
+$xy$.
 
-\textbf{Comparación justa con la línea base.} Comparar silhouette entre 11 y 239
-segmentos no es justo, porque este índice premia pocos grupos. Por eso recalculamos las
-métricas en las mismas variables geométricas, con 91\,981 puntos y colapsando a $K=11$: la
-línea base obtuvo silhouette 0.146 y Davies-Bouldin 2.54 y el resultado final 0.107 y 2.59.
-\textbf{Por lo tanto, el método en etapas no mejora las métricas internas}; esas métricas
-premian grupos compactos y redondos, y las columnas y vigas son alargadas. Su ventaja está en
-cosas que esas métricas no miden y que sí se ven en las figuras, resumidas en la
-tabla~\ref{tab:comp}. La concordancia entre ambos resultados es baja (ARI 0.17, NMI 0.26), lo
-que solo indica que son particiones distintas.
-
-\begin{table}[!htb]
-\centering
-\caption{Línea base de clase (k-means $K=11$) frente al método en etapas.}
-\label{tab:comp}
-\small
-\begin{tabular}{p{3.6cm}p{5.4cm}p{5.4cm}}
-\toprule
-Criterio & k-means (clase) & Por etapas \\
-\midrule
-Nombre de los grupos & Solo ``cluster 0'', ``cluster 1''\ldots; el significado se interpreta a mano & Piso, techo, columna, viga, viga o tubería, equipo bajo \\
-Piso & 10 grupos lo tocan; el mayor tiene 36\,\% del piso & 1 segmento (488\,252 puntos) \\
-Techo & Un grupo, con fragmentos de vigas altas & 1 segmento (111\,522 puntos) \\
-Columnas por separado & No & Sí: 9 grupos de huellas (17 segmentos) \\
-Grupos mezclados & 2 de 11 (a ojo) & 15.5\,\% de la nube \\
-Silhouette / Davies-Bouldin & \textbf{0.146} / \textbf{2.54} & 0.107 / 2.59 \\
-Tiempo de ejecución total & Alrededor de 1.5 min & Alrededor de 5 min \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\FloatBarrier
-\subsection{Etapa 5: personas y vehículos}\label{sec:etapa5}
-Al revisar la nube con su color original vimos que sí hay personas y un vehículo, que las
-etapas 1--4 habían repartido en otras clases: las personas en ``equipo bajo'', ``mezcla'' y
-``compacto plausible'', y una camioneta pickup en ``viga o tubería''. La etapa 5 parte de las
-clases de la etapa 4 y hace lo siguiente:
-\begin{enumerate}
-\item \textbf{Piso local.} Mediana de $z$ de los puntos de piso en celdas de 1\,m; el piso
-no es plano (hay zonas 0.2\,m más altas), así que la altura se mide contra la celda más cercana.
-\item \textbf{Objetos libres.} DBSCAN ($\varepsilon=0.15$\,m, \textit{minPts}~8) sobre los
-puntos entre 0.05 y 2.6\,m que no son piso, techo ni columna. Un objeto que llega a 2.6\,m
-está pegado a estructura y se descarta; uno con más de 30\,\% de puntos bajo 0.45\,m es una
-tarima o plataforma.
-\item \textbf{Vehículo}: huella PCA en $xy$ de 3--7\,m por al menos 1\,m y altura de
-1.2--2.6\,m. \textbf{Persona}: altura de 1.45--1.95\,m y huella de 0.4--1.0\,m.
-\item \textbf{Personas pegadas.} En objetos más grandes buscamos cabezas: cimas locales a
-altura humana agrupadas con DBSCAN en $xy$, con cuerpo debajo, sin puntos encima y con poco
-alrededor a la misma altura (esto descarta la parte superior de tanques y válvulas). Cada
-cabeza toma los puntos a menos de 0.38\,m en $xy$.
-\end{enumerate}
-Resultado: \textbf{1 vehículo} (6\,586 puntos) y \textbf{28 detecciones de persona}
-(10\,127 puntos), revisadas una por una contra el RGB original
-(figura~\ref{fig:etapa5}). El escáner gira mientras la gente camina, así que una persona en
-movimiento aparece como \textit{rebanadas} de unos 2\,cm de ancho con silueta humana; varias
-detecciones pueden ser la misma persona, por lo que 28 no es un conteo de personas. En
+Con esto la etapa 5 encontró \textbf{1 vehículo} (6\,586 puntos) y \textbf{28 detecciones de
+persona} (10\,127 puntos), que revisamos una por una contra el RGB original
+(figura~\ref{fig:etapa5}). Esas 28 detecciones no equivalen a 28 personas: como el escáner
+gira mientras la gente camina, una persona en movimiento aparece como \textit{rebanadas} de
+unos 2\,cm de ancho con silueta humana, y varias detecciones pueden ser la misma persona. En
 nuestras pruebas, sin la condición de espacio libre alrededor de la cabeza salían 7 falsos
-positivos en tanques y válvulas; con ella no quedó ninguno visible.
+positivos en tanques y válvulas; con ella no quedó ninguno visible. La tabla~\ref{tab:clases6}
+muestra cómo queda el reparto de la nube final y la figura~\ref{fig:final6} la nube completa.
 
-\begin{figure}[!htb]
+\begin{table}[H]
 \centering
-\includegraphics[width=0.95\textwidth]{figs/exp_06_personas_vehiculos.png}
+\caption{Reglas de tamaño de la etapa 5 sobre los objetos libres (altura sobre el piso local).}
+\label{tab:reglas5}
+\small
+\begin{tabular}{lccc}
+\toprule
+Clase & Largo de la huella & Ancho de la huella & Altura \\
+\midrule
+Vehículo & 3--7\,m & $\ge 1$\,m & 1.2--2.6\,m \\
+Persona & 0.4--1.0\,m & --- & 1.45--1.95\,m \\
+Cabeza (para separar personas pegadas) & radio 0.38\,m en $xy$ & --- & cima entre 1.45 y 1.95\,m \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth,height=0.30\textheight,keepaspectratio]{figs/exp_06_personas_vehiculos.png}
 \caption{Detecciones de la etapa 5 (color de clase) sobre su entorno con el RGB original.}
 \label{fig:etapa5}
 \end{figure}
 
-\begin{figure}[!htb]
-\centering
-\includegraphics[width=0.95\textwidth]{figs/exp_06_final.png}
-\caption{Nube final exportada (\texttt{entregable/final\_segmentos.ply}): etapas 1--5.}
-\label{fig:final6}
-\end{figure}
-
-\begin{table}[!htb]
+\begin{table}[H]
 \centering
 \caption{Reparto de la nube final exportada, con la etapa 5. Los segmentos de las clases de la etapa 4 son los de la tabla~\ref{tab:clases}.}
 \label{tab:clases6}
@@ -449,46 +420,130 @@ Compacto plausible & 6 & 5\,566 & 0.34 \\
 \end{tabular}
 \end{table}
 
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth,height=0.30\textheight,keepaspectratio]{figs/exp_06_final.png}
+\caption{Nube final exportada (\texttt{entregable/final\_segmentos.ply}): etapas 1--5.}
+\label{fig:final6}
+\end{figure}
+
+\FloatBarrier
+\subsection{Evaluación del método en etapas}
+\textbf{Ablaciones.} La tabla~\ref{tab:ablacion} compara la línea base con variantes de las
+etapas 2 a 4. Sacar las normales hizo bajar la estabilidad de 0.97 a 0.55 (ARI), así que las
+normales fueron lo más útil. Agregar color o altura casi no cambió nada, y el tamaño del
+voxel modificó la cantidad de segmentos y de ruido (voxel de 0.25 m: 2.5\,\% de ruido). En el
+control sin orientación se ve el problema original: un segmento que concentra 61\,\% de los
+puntos.
+
+En la etapa 5 la ablación que hicimos fue quitar la condición de espacio libre alrededor de
+la cabeza: sin ella aparecían 7 falsos positivos en tanques y válvulas, y con ella no quedó
+ninguno visible. Esta etapa no tiene una línea base comparable, porque ni k-means ni las demás
+técnicas de clase producen una clase de personas o vehículos.
+
+\begin{table}[H]
+\centering
+\caption{Ablaciones principales de las etapas 2 a 4. Mezcla y columnas altas son sobre la nube completa; ARI es estabilidad entre submuestras (la línea base usa semillas, protocolo distinto).}
+\label{tab:ablacion}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+Configuración & Segmentos & Mezcla \% & Col. altas & ARI \\
+\midrule
+Línea base (k-means $K=11$) & 11 & --- & --- & 0.95 \\
+DBSCAN sin orientación & 106 & 61.1 & 1 & 0.97 \\
+DBSCAN con orientación & 664 & 7.6 & 16 & 0.97 \\
+Con orientación sin normales & 708 & 7.6 & 16 & 0.55 \\
+HDBSCAN (mín. 100) & 122 & 20.5 & 5 & 0.94 \\
+\textbf{HDBSCAN (mín. 40, final)} & \textbf{239} & \textbf{15.5} & \textbf{9} & \textbf{0.97} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Comparación justa con la línea base.} Comparar silhouette entre 11 y 239
+segmentos no es justo, porque este índice premia pocos grupos. Por eso recalculamos las
+métricas en las mismas variables geométricas, colapsando a $K=11$ y usando solo los
+puntos de la muestra que ambos resultados comparten. Con las etapas 1--4 (91\,981 puntos) la
+línea base obtuvo silhouette 0.146 y Davies-Bouldin 2.54 y el método en etapas 0.107 y 2.59.
+Con la etapa 5 incluida (91\,498 puntos, porque cambia el soporte compartido) la línea base
+obtuvo 0.155 y 2.55 y el método completo 0.114 y 2.60. La etapa 5 reasigna solo unos 16\,700
+puntos a persona y vehículo, así que casi no mueve las métricas. \textbf{Por lo tanto, el método en etapas no mejora
+las métricas internas}; esas métricas premian grupos compactos y redondos, y las columnas y
+vigas son alargadas. Su ventaja está en cosas que esas métricas no miden y que sí se ven en
+las figuras, resumidas en la tabla~\ref{tab:comp}, donde la etapa 5 agrega lo que la línea
+base no puede dar: personas y un vehículo. La concordancia entre ambos resultados es
+baja (ARI 0.17, NMI 0.26), lo que solo indica que son particiones distintas.
+
+\begin{table}[H]
+\centering
+\caption{Línea base de clase (k-means $K=11$) frente al método en etapas.}
+\label{tab:comp}
+\small
+\begin{tabular}{p{3.6cm}p{5.4cm}p{5.4cm}}
+\toprule
+Criterio & k-means (clase) & Por etapas \\
+\midrule
+Nombre de los grupos & Solo ``cluster 0'', ``cluster 1''\ldots; el significado se interpreta a mano & Piso, techo, columna, viga, viga o tubería, equipo bajo, persona, vehículo \\
+Piso & 10 grupos lo tocan; el mayor tiene 36\,\% del piso & 1 segmento (488\,252 puntos) \\
+Techo & Un grupo, con fragmentos de vigas altas & 1 segmento (111\,522 puntos) \\
+Columnas por separado & No & Sí: 9 grupos de huellas (17 segmentos) \\
+Grupos mezclados & 2 de 11 (a ojo) & 15.5\,\% de la nube \\
+Personas y vehículos & No los distingue & 1 vehículo y 28 detecciones de persona (etapa 5) \\
+Silhouette / Davies-Bouldin, etapas 1--4 & \textbf{0.146} / \textbf{2.54} & 0.107 / 2.59 \\
+Silhouette / Davies-Bouldin, con etapa 5 & \textbf{0.155} / \textbf{2.55} & 0.114 / 2.60 \\
+Tiempo de ejecución total & Alrededor de 1.5 min & Alrededor de 5 min \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \FloatBarrier
 \section{Discusión y limitaciones}
-\begin{itemize}
-\item \textbf{No hay etiquetas reales.} No podemos decir qué porcentaje de puntos está bien
+\textbf{No hay etiquetas reales.} No podemos decir qué porcentaje de puntos está bien
 clasificado. Nuestra evaluación es interna, de estabilidad y visual, así que los números
 sirven para comparar configuraciones y no para afirmar exactitud. Por eso decimos que el
 método en etapas es \textit{más útil e interpretable}, no que sea \textit{más preciso}.
-\item \textbf{Por qué creemos que las etapas son más útiles.} Con k-means el piso termina
+
+\textbf{Por qué creemos que las etapas son más útiles.} Con k-means el piso termina
 repartido en varios grupos y mezclado con otros, porque el algoritmo solo mira distancias
 entre variables y no sabe qué es un plano. RANSAC encuentra el piso y el techo directamente.
 Además, k-means entrega grupos numerados y hay que mirarlos uno por uno para saber qué son,
 mientras que las etapas entregan clases con nombre. Esto es una ventaja de interpretación
 y no de exactitud medida.
-\item \textbf{Costo y métricas.} Las etapas son más lentas (alrededor de 5 min contra 1.5 min
+
+\textbf{Costo y métricas.} Las etapas son más lentas (alrededor de 5 min contra 1.5 min
 de ejecución total) y no superan a k-means en silhouette ni en Davies-Bouldin.
-\item \textbf{Regla de selección cambiada.} Dos veces ajustamos la regla de selección después
+
+\textbf{Regla de selección cambiada.} Dos veces ajustamos la regla de selección después
 de mirar los resultados: en clase (el silhouette elegía $K=2$) y en la etapa final (la
 primera elegida omitía columnas que se veían claras en la vista lateral, por lo que exigimos
 al menos 6 grupos de huellas altas). Es razonable, pero no es una elección fijada de
 antemano, y lo declaramos por eso.
-\item \textbf{Las clases son heurísticas.} Con linealidad y planaridad no pudimos distinguir
+
+\textbf{Las clases son heurísticas.} Con linealidad y planaridad no pudimos distinguir
 tuberías de vigas, así que quedó una clase ``viga o tubería''. Tampoco hay una clase
 ``truss'' ni ``pared'' confirmada.
-\item \textbf{Personas y vehículos.} La etapa 5 se ajustó y se revisó a ojo sobre esta
+
+\textbf{Personas y vehículos.} La etapa 5 se ajustó y se revisó a ojo sobre esta
 misma nube. No detecta personas pegadas a estructura que pasa de 2.6\,m ni personas tapadas
 hasta la cintura (por ejemplo, tres detrás de una baranda cerca de $(10, 19)$), y un objeto
 delgado de 1.5--1.9\,m con silueta parecida podría pasar como persona. Las rebanadas de
 personas en movimiento hacen que el número de detecciones no sea un conteo. Solo hay un
 vehículo en la escena, así que la regla de vehículo está probada con un solo caso.
-\item \textbf{Columnas.} Los 17 segmentos de columna incluyen fragmentos y algunos soportes
+
+\textbf{Columnas.} Los 17 segmentos de columna incluyen fragmentos y algunos soportes
 que no son columnas completas (por ejemplo, cerca de $x\approx0.5$ y $3.5$ m quedan
 incompletas) y algunos fragmentos duplicados. Son candidatas, no un censo.
-\item \textbf{Mezcla.} El 15.5\,\% de la nube queda como mezcla no identificada.
-\item \textbf{Parámetros.} Umbrales como $k=96$, linealidad 0.45 o 0.08 m del piso los
+
+\textbf{Mezcla.} El 15.5\,\% de la nube queda como mezcla no identificada.
+
+\textbf{Parámetros.} Umbrales como $k=96$, linealidad 0.45 o 0.08 m del piso los
 elegimos mirando curvas de sensibilidad y los resultados, y con otra escena podrían cambiar.
-\item \textbf{Submuestreo.} Los grupos se calculan en una muestra y se propagan al resto,
+
+\textbf{Submuestreo.} Los grupos se calculan en una muestra y se propagan al resto,
 así que los bordes entre objetos son menos precisos.
-\item \textbf{Reevaluación.} El procedimiento y los umbrales se desarrollaron y se
+
+\textbf{Reevaluación.} El procedimiento y los umbrales se desarrollaron y se
 revisaron sobre esta misma nube, así que no son una evaluación sobre datos nuevos.
-\end{itemize}
 
 \section{Conclusiones}
 \textbf{Conclusión principal.} Para esta nube, el método en etapas es más útil que usar solo
@@ -499,21 +554,19 @@ entrega ``cluster 0'', ``cluster 1'', etc. Es una ventaja de interpretación y u
 exactitud medida: no hay etiquetas reales, las métricas internas no la favorecen y el método
 es más lento.
 
-\begin{itemize}
-\item Con las técnicas de clase, k-means con $xyz$, color, normales y altura estandarizados
-y $K=11$ dio una primera segmentación útil (techo, vigas, tubería, columnas), pero el piso
-quedó partido y las columnas no se separan por instancia.
-\item El silhouette solo favoreció $K=2$ en k-means, jerárquico y GMM, y en DBSCAN todo
-se juntaba o todo era ruido; aprendimos que hay que mirar varias métricas y las figuras.
-\item Separar por orientación local antes de agrupar por distancia fue la idea que más ayudó:
-bajó la mezcla de 61\,\% a 15.5\,\% (con HDBSCAN) y subió los grupos de columnas altas de 1 a 9.
-Las normales fueron la variable más importante.
-\item El piso quedó como un solo segmento gracias a RANSAC.
-\item Las personas y el vehículo no salen de la forma local: hay que buscarlos como objetos
-libres sobre el piso local. Con eso la etapa 5 encontró la camioneta y 28 siluetas de persona.
-\item El método en etapas no superó a la línea base en silhouette ni Davies-Bouldin, y sigue
-con limitaciones (mezcla, tuberías contra vigas, personas ocultas o pegadas a estructura).
-\end{itemize}
+Los resultados de cada parte se resumen en seis puntos. 1) Con las técnicas de clase,
+k-means con $xyz$, color, normales y altura estandarizados y $K=11$ dio una primera
+segmentación útil (techo, vigas, tubería, columnas), pero el piso quedó partido y las columnas
+no se separaron por instancia. 2) El silhouette solo favoreció $K=2$ en k-means, jerárquico y
+GMM, y en DBSCAN todo se juntaba o todo era ruido; aprendimos que hay que mirar varias métricas
+y las figuras. 3) Separar por orientación local antes de agrupar por distancia fue la idea que
+más ayudó: bajó la mezcla de 61\,\% a 15.5\,\% (con HDBSCAN) y subió los grupos de columnas
+altas de 1 a 9, y las normales fueron la variable más importante. 4) El piso quedó como un solo
+segmento gracias a RANSAC. 5) Las personas y el vehículo no salen de la forma local: hay que
+buscarlos como objetos libres sobre el piso local, y así la etapa 5 encontró la camioneta y 28
+siluetas de persona. 6) El método en etapas no superó a la línea base en silhouette ni en
+Davies-Bouldin, y sigue con limitaciones (mezcla, tuberías contra vigas, personas ocultas o
+pegadas a estructura).
 
 \begin{thebibliography}{9}
 \bibitem{lloyd1982} S. P. Lloyd, ``Least squares quantization in PCM,'' \textit{IEEE Transactions on Information Theory}, vol. 28, no. 2, pp. 129--137, 1982.
